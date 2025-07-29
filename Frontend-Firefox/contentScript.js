@@ -20,6 +20,10 @@ if (window.injectedMC !== 1) {
     var upscaleFactor = 4  // Image upscale factor x2 or x4
     var denoiseSigma = 25  // Expected noise in image, basically blur strength
 
+    var translate = false // Translates the image
+    var srcLang = 'auto' // Source language for translation
+    var destLang = 'en' // Destination language for translation
+
     var showOriginal = false  // Shows original image, if processed (colorized)
     var showColorized = true  // Shows processed image, if processed (colorized)
 
@@ -190,7 +194,7 @@ if (window.injectedMC !== 1) {
 
 
     // ---- API functions and helpers ----
-    async function fetchColorizedImg(index, url, options, img, imgName) {
+    async function fetchProcessedImg(index, url, options, img, imgName) {
     console.log(`[MC] [${index}] Fetching: ${imgName}`);
     const savedSrc = img.src
     return fetch(url, options)
@@ -203,18 +207,20 @@ if (window.injectedMC !== 1) {
         .then(json => {
             if (json.msg)
                 console.log(`[MC] [${index}] Message: ${json.msg}`);
-            if (json.colorImgData) {
+
+            let processedImgData = json.colorImgData || json.translatedImgData;
+            if (processedImgData) {
                 if(img.src != savedSrc){
                     console.log(`[MC] [${index}] Image src changed while request was in progress, invalidating...`)
                     img.removeAttribute('data-is-processed')
                     return;
                 }
                 const imgClone = img.cloneNode(true);
-                img.dataset.isColored = true;
+                img.dataset.isColored = true; // "isColored" is used for visibility toggle
                 img.dataset.isProcessed = true;
                 imgClone.dataset.isCloned = true;
 
-                img.src = json.colorImgData;
+                img.src = processedImgData;
                 if (img.dataset?.src) img.dataset.src = '';
                 if (img.srcset) img.srcset = '';
 
@@ -288,10 +294,10 @@ if (window.injectedMC !== 1) {
                 body: JSON.stringify(postData)
             };
 
-            fetchColorizedImg(index, new URL('colorize-image-data', apiURL).toString(), options, img, imgName)
+            fetchProcessedImg(index, new URL('colorize-image-data', apiURL).toString(), options, img, imgName)
                 .finally(() => {
                     activeFetches -= 1;
-                    if(!force) colorizeMangaEventHandler();
+                    if(!force) processMangaEventHandler();
                 });
             return 3
         } else {
@@ -310,6 +316,45 @@ if (window.injectedMC !== 1) {
             return 0;
         } catch(e) {
             console.log(`[MC] [${index}] Colorize image error: ${e}`)
+            return 0;
+        }
+    }
+
+    const translateImg = (index, img, apiURL, force, mangaProps) => {
+        if (apiURL) try {
+            const imageName = mangaProps.altText ? img.alt : ''
+            const imgName = imageName || (img.src || img.dataset?.src || '').rsplit('/', 1)[1];
+            if (imgName) {
+                activeFetches += 1;
+                img.dataset.isProcessed = true;
+                const postData = {
+                    imgName: imgName,
+                    imgURL: img.src,
+                    imgWidth: img.width,
+                    imgHeight: img.height,
+                    srcLang: srcLang,
+                    destLang: destLang,
+                }
+                console.log(`[MC] [${index}] Sending for translation: `, postData);
+
+                const options = {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(postData)
+                };
+
+                fetchProcessedImg(index, new URL('translate-image-data', apiURL).toString(), options, img, imgName)
+                    .finally(() => {
+                        activeFetches -= 1;
+                        if(!force) processMangaEventHandler();
+                    });
+                return 3
+            }
+            return 0;
+        } catch(e) {
+            console.log(`[MC] [${index}] Translate image error: ${e}`)
             return 0;
         }
     }
@@ -378,8 +423,8 @@ if (window.injectedMC !== 1) {
         }
     }
 
-    function colorizeSingleImage(img) {
-        console.log('[MC] Force colorize: ', img.src)
+    function processSingleImage(img) {
+        console.log('[MC] Force process: ', img.src)
 
         const imgSrc = img.src;
         const imgs = document.querySelectorAll(`img[src="${imgSrc}"]`);
@@ -391,7 +436,7 @@ if (window.injectedMC !== 1) {
                 imgElement.removeAttribute('data-is-colored');
             }
             if(imgElement.dataset.isProcessed){
-                console.log('[MC] A colorized image is being re-colorized')
+                console.log('[MC] A processed image is being re-processed')
                 imgElement.removeAttribute('data-is-processed');
             }
         });
@@ -403,14 +448,19 @@ if (window.injectedMC !== 1) {
         const pageNameFromAltText = site ? config.useAltTextAsImageName : false
 
         const mangaProps = {title: title, chapter: chapter, altText: pageNameFromAltText}
-        let status = colorizeImg(0, img, apiURL, true, mangaProps);
-        console.log('[MC] Force colorization status: ', status)
+        let status;
+        if (translate) {
+            status = translateImg(0, img, apiURL, true, mangaProps);
+        } else {
+            status = colorizeImg(0, img, apiURL, true, mangaProps);
+        }
+        console.log('[MC] Force process status: ', status)
     }
 
     // ---- Extension interface functions ----
-    const colorizeMangaEventHandler = (event=null) => {
+    const processMangaEventHandler = (event=null) => {
         try {
-            browser.storage.local.get(["apiURL", "maxActiveFetches", "showOriginal", "showColorized", "cache", "denoise", "colorize", "upscale", "denoiseSigma", "upscaleFactor",
+            browser.storage.local.get(["apiURL", "maxActiveFetches", "showOriginal", "showColorized", "cache", "denoise", "colorize", "upscale", "denoiseSigma", "upscaleFactor", "translate", "srcLang", "destLang",
                 "colorTolerance", "colorStride", "minImgHeight", "minImgHeight"], (result) => {
                 apiURL = result.apiURL;
                 if (apiURL && siteConfigurations) {
@@ -424,6 +474,9 @@ if (window.injectedMC !== 1) {
                     upscale = result.upscale
                     denoiseSigma = result.denoiseSigma || "25"
                     upscaleFactor = result.upscaleFactor || "4"
+                    translate = result.translate
+                    srcLang = result.srcLang
+                    destLang = result.destLang
 
                     const storedColorTolerance = result.colorTolerance;
                     const storedColorStride = result.colorStride;
@@ -463,7 +516,7 @@ if (window.injectedMC !== 1) {
                         } else if (img.dataset.isProcessed){
                             processing++
                         } else if (!img.complete || !img.src) {
-                            img.addEventListener('load', colorizeMangaEventHandler, { passive: true });
+                            img.addEventListener('load', processMangaEventHandler, { passive: true });
                             total--
                         } else if (img.width > 0 && img.width < minImgWidth || img.height > 0 && img.height < minImgHeight) {
                             skipped++
@@ -471,7 +524,12 @@ if (window.injectedMC !== 1) {
                             awaited++
                         } else {
                             const mangaProps = {title: title, chapter: chapter, altText: pageNameFromAltText}
-                            let status = colorizeImg(index, img, apiURL, false, mangaProps);
+                            let status;
+                            if (translate) {
+                                status = translateImg(index, img, apiURL, false, mangaProps);
+                            } else {
+                                status = colorizeImg(index, img, apiURL, false, mangaProps);
+                            }
                             switch(status){
                                 case 0: failed++; break;
                                 case 1: colored++; break;
@@ -512,9 +570,9 @@ if (window.injectedMC !== 1) {
             console.log('[MC] Image visibility toggled')
             toggleImageVisibility(request.showOriginal, request.showColorized);
         }
-        if (request.action === 'runColorizer'){
-            console.log('[MC] Running colorizer')
-            colorizeMangaEventHandler();
+        if (request.action === 'runProcessor'){
+            console.log('[MC] Running processor')
+            processMangaEventHandler();
         }
         if(request.action === 'startSelectMode') {
             console.log('[MC] Entered select mode')
@@ -536,7 +594,7 @@ if (window.injectedMC !== 1) {
                         clonedImg.dataset.inView = true
                     } else if(originalImg.style.display === 'none'){
                         originalImg.dataset.inView = false
-                        clonedImg.dataset.inView = false
+                        clonedImg.dataset.in_view = false
                     }
                 }
 
@@ -545,7 +603,7 @@ if (window.injectedMC !== 1) {
                     originalImg.removeAttribute('data-is-processed')
                     originalImg.removeAttribute('data-is-colored')
 
-                    colorizeMangaEventHandler()
+                    processMangaEventHandler()
                 }
 
                 if (mutation.type === 'childList') {
@@ -565,8 +623,8 @@ if (window.injectedMC !== 1) {
         originalImg._observer = observer;
     }
 
-    colorizeMangaEventHandler();
+    processMangaEventHandler();
 
-    const observer = new MutationObserver(colorizeMangaEventHandler);
+    const observer = new MutationObserver(processMangaEventHandler);
     observer.observe(document.querySelector("body"), { subtree: true, childList: true });
 };

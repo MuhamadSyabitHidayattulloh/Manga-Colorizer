@@ -6,6 +6,10 @@ const cacheCheckbox = document.getElementById("cache-checkbox");
 const denoiseCheckbox = document.getElementById("denoiser-checkbox");
 const colorizeCheckbox = document.getElementById("colorizer-checkbox");
 const upscaleCheckbox = document.getElementById("upscaler-checkbox");
+const translatorCheckbox = document.getElementById("translator-checkbox");
+const translatorSettings = document.getElementById("translator-settings");
+const sourceLangSelect = document.getElementById("source-lang-select");
+const destLangSelect = document.getElementById("dest-lang-select");
 const upscaleFactorSelector = document.querySelectorAll("input[name='upscale-factor']");
 const upscaleFactorSelector2 = document.getElementById("upscale-factor-2");
 const upscaleFactorSelector4 = document.getElementById("upscale-factor-4");
@@ -19,7 +23,7 @@ const testApiButton = document.getElementById("test-api");
 const forceRunButton = document.getElementById("force-run");
 
 browser.storage.local.get(["apiURL", "maxActiveFetches", "showOriginal", "showColorized", "cache", "denoise",
-                "colorize", "upscale", "denoiseSigma", "upscaleFactor",
+                "colorize", "upscale", "denoiseSigma", "upscaleFactor", "translate", "srcLang", "destLang",
                 "colorTolerance", "colorStride", "websites"], (result) => {
     urlInput.value = result.apiURL || "";
     maxActiveFetches.value = result.maxActiveFetches || "1";
@@ -29,12 +33,18 @@ browser.storage.local.get(["apiURL", "maxActiveFetches", "showOriginal", "showCo
     denoiseCheckbox.checked = result.denoise !== undefined ? result.denoise : true;
     colorizeCheckbox.checked = result.colorize !== undefined ? result.colorize : true;
     upscaleCheckbox.checked = result.upscale !== undefined ? result.upscale : true;
+    translatorCheckbox.checked = result.translate !== undefined ? result.translate : false;
+    sourceLangSelect.value = result.srcLang || "auto";
+    destLangSelect.value = result.destLang || "en";
     if (result.upscaleFactor === '2') {
         upscaleFactorSelector2.checked = true;
     } else if (result.upscaleFactor === '4') {
         upscaleFactorSelector4.checked = true;
     } else {
         upscaleFactorSelector4.checked = true;
+    }
+    if (translatorCheckbox.checked) {
+        translatorSettings.style.display = 'block';
     }
     denoiseSigmaInput.value = result.denoiseSigma || "25";
     colorToleranceInput.value = result.colorTolerance || "30";
@@ -105,6 +115,9 @@ runButton.addEventListener("click",() => {
         denoise: denoiseCheckbox.checked,
         colorize: colorizeCheckbox.checked,
         upscale: upscaleCheckbox.checked,
+        translate: translatorCheckbox.checked,
+        srcLang: sourceLangSelect.value,
+        destLang: destLangSelect.value,
         upscaleFactor: selectedUpscaleFactor,
         denoiseSigma: denoiseSigmaInput.value.trim(),
         colorTolerance: colorToleranceInput.value.trim(),
@@ -120,17 +133,24 @@ runButton.addEventListener("click",() => {
     });
 })
 
+runButton.textContent = "Process!";
+forceRunButton.textContent = "Force Process!";
+
+translatorCheckbox.addEventListener('change', () => {
+    translatorSettings.style.display = translatorCheckbox.checked ? 'block' : 'none';
+});
+
 forceRunButton.addEventListener('click', () => {
     forceRunButton.textContent = "Select an Image";
-    forceRunButton.disabled = true
+    forceRunBUtton.disabled = true
     browser.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: "startSelectMode" });
+        browser.tabs.sendMessage(tabs[0].id, { action: "startSelectMode" });
     });
 });
 
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "exitSelectMode") {
-        forceRunButton.textContent = "Force Colorize!";
+        forceRunButton.textContent = "Force Process!";
         forceRunButton.disabled = false
     }
 });
