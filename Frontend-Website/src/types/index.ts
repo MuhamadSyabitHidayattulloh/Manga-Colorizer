@@ -5,6 +5,9 @@ export interface ProcessingSettings {
   upscaleFactor: 2 | 4
   denoiseSigma: number
   cache: boolean
+  translate: boolean
+  srcLang: string
+  destLang: string
 }
 
 export interface ProcessedImage {
@@ -18,5 +21,6 @@ export interface ProcessedImage {
 
 export interface ApiResponse {
   colorImgData?: string
+  translatedImgData?: string
   msg?: string
 }

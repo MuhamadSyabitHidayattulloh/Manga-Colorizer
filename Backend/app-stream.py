@@ -17,6 +17,7 @@ from flask_cors import CORS
 from denoisator import MangaDenoiser
 from colorizator import MangaColorizator
 from upscalator import MangaUpscaler
+from translator import MangaTranslator
 from utils.utils import distance_from_grayscale, generate_random_id, \
     image_to_base64, load_image_as_base64, save_image, sanitize_string, clear_torch_cache
 
@@ -127,8 +128,48 @@ def colorize_image_data():
     return response
 
 
+@app.route('/translate-image-data', methods=['POST'])
+def translate_image_data():
+    rid = generate_random_id()
+
+    try:
+        req_json = request.get_json()
+        img_name = req_json.get('imgName', f'Image-{rid}')
+        img_url = req_json.get('imgURL', '')
+        img_data = req_json.get('imgData')
+        src_lang = req_json.get('srcLang', 'auto')
+        dest_lang = req_json.get('destLang', 'en')
+
+        check_model_availability(rid, True, config.translate, 'translate')
+
+        if img_data:
+            img_metadata, img_data64 = img_data.split(',', 1)
+            orig_image_binary = base64.decodebytes(bytes(img_data64, encoding='utf-8'))
+        elif img_url:
+            orig_image_binary = retrieve_image_binary(rid, request, img_url)
+        else:
+            msg = 'Neither imgData nor imgURL found in the request'
+            print(f'[-] [{rid}] {msg}')
+            return jsonify({'msg': f'Image: {img_name}, Error: {msg}'})
+
+        imgio = io.BytesIO(orig_image_binary)
+        image = PIL.Image.open(imgio).convert("RGB")
+        image = np.array(image)
+
+        print(f'[*] [{rid}] Translating image...')
+        image = translator.translate(image, src_lang=src_lang, dest_lang=dest_lang)
+
+        result_image_data64 = image_to_base64(image)
+        return jsonify({'translatedImgData': result_image_data64})
+
+    except Exception as e:
+        print(f'[!] [{rid}] Error: {e}')
+        # handle_cuda_error(e) # Might not be a cuda error
+        return jsonify({'msg': f'Image: {img_name}, Error: Unable to translate'})
+
+
 def handle_cuda_error(e):
-    global colorizer, upscaler, denoiser
+    global colorizer, upscaler, denoiser, translator
 
     if 'CUDA error: an illegal memory access was encountered' \
         in str(e) or 'CUDA out of memory' in str(e) or \
@@ -137,6 +178,7 @@ def handle_cuda_error(e):
         colorizer = None
         upscaler = None
         denoiser = None
+        translator = None
         clear_torch_cache()
         gc.collect()
         initialize_components()
@@ -225,13 +267,15 @@ config = None
 colorizer = None
 upscaler = None
 denoiser = None
+translator = None
 
 def initialize_components():
-    global colorizer, upscaler, denoiser
+    global colorizer, upscaler, denoiser, translator
 
     colorizer = MangaColorizator(config) if config.colorize else None
     upscaler = MangaUpscaler(config) if config.upscale else None
     denoiser = MangaDenoiser(config) if config.denoise else None
+    translator = MangaTranslator(config) if config.translate else None
     print(f'[+] Components initialized')
 
 if __name__ == '__main__':
@@ -248,6 +292,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-colorize', dest='colorize', action='store_false', default=True,
                         help='Disable colorization')
     parser.add_argument('--no-denoise', dest='denoise', action='store_false', default=True, help='Disable denoiser')
+    parser.add_argument('--no-translate', dest='translate', action='store_false', default=True, help='Disable translation')
     parser.add_argument('--upscale_factor', choices=[2, 4], default=4, type=int, help='Upscale by x2 or x4')
     parser.add_argument('--denoise_sigma', default=25, type=int, help='How much noise to expect from the image')
 

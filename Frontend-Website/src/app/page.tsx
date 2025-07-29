@@ -16,7 +16,10 @@ export default function Home() {
     denoise: true,
     upscaleFactor: 4,
     denoiseSigma: 25,
-    cache: false
+    cache: false,
+    translate: false,
+    srcLang: 'auto',
+    destLang: 'en'
   })
   const [uploadedImages, setUploadedImages] = useState<File[]>([])
   const [processedImages, setProcessedImages] = useState<ProcessedImage[]>([])

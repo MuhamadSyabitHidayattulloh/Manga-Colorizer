@@ -72,23 +72,32 @@ export default function ImageProcessor({
         
         const imgData = canvas.toDataURL('image/png')
         
-        const postData = {
+        const isTranslate = settings.translate;
+        const endpoint = isTranslate ? 'translate-image-data' : 'colorize-image-data';
+
+        const postData: any = {
           imgName: file.name,
           imgData: imgData,
           imgWidth: img.width,
           imgHeight: img.height,
-          cache: settings.cache,
-          denoise: settings.denoise,
-          colorize: settings.colorize,
-          upscale: settings.upscale,
-          denoiseSigma: settings.denoiseSigma,
-          upscaleFactor: settings.upscaleFactor,
-          mangaTitle: '',
-          mangaChapter: ''
+        }
+
+        if (isTranslate) {
+          postData.srcLang = settings.srcLang;
+          postData.destLang = settings.destLang;
+        } else {
+          postData.cache = settings.cache;
+          postData.denoise = settings.denoise;
+          postData.colorize = settings.colorize;
+          postData.upscale = settings.upscale;
+          postData.denoiseSigma = settings.denoiseSigma;
+          postData.upscaleFactor = settings.upscaleFactor;
+          postData.mangaTitle = '';
+          postData.mangaChapter = '';
         }
 
         try {
-          const response = await fetch(`${apiUrl}/colorize-image-data`, {
+          const response = await fetch(`${apiUrl}/${endpoint}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -102,13 +111,14 @@ export default function ImageProcessor({
 
           const result = await response.json()
           const processingTime = Date.now() - startTime
+          const processedUrl = result.translatedImgData || result.colorImgData;
 
-          if (result.colorImgData) {
+          if (processedUrl) {
             resolve({
               id: index,
               originalFile: file,
               originalUrl: URL.createObjectURL(file),
-              processedUrl: result.colorImgData,
+              processedUrl: processedUrl,
               error: null,
               processingTime
             })
