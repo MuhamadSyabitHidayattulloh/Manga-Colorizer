@@ -72,32 +72,26 @@ export default function ImageProcessor({
         
         const imgData = canvas.toDataURL('image/png')
         
-        const isTranslate = settings.translate;
-        const endpoint = isTranslate ? 'translate-image-data' : 'colorize-image-data';
-
-        const postData: any = {
+        const postData = {
           imgName: file.name,
           imgData: imgData,
           imgWidth: img.width,
           imgHeight: img.height,
-        }
-
-        if (isTranslate) {
-          postData.srcLang = settings.srcLang;
-          postData.destLang = settings.destLang;
-        } else {
-          postData.cache = settings.cache;
-          postData.denoise = settings.denoise;
-          postData.colorize = settings.colorize;
-          postData.upscale = settings.upscale;
-          postData.denoiseSigma = settings.denoiseSigma;
-          postData.upscaleFactor = settings.upscaleFactor;
-          postData.mangaTitle = '';
-          postData.mangaChapter = '';
+          cache: settings.cache,
+          denoise: settings.denoise,
+          colorize: settings.colorize,
+          upscale: settings.upscale,
+          denoiseSigma: settings.denoiseSigma,
+          upscaleFactor: settings.upscaleFactor,
+          translate: settings.translate,
+          srcLang: settings.srcLang,
+          destLang: settings.destLang,
+          mangaTitle: '',
+          mangaChapter: ''
         }
 
         try {
-          const response = await fetch(`${apiUrl}/${endpoint}`, {
+          const response = await fetch(`${apiUrl}/colorize-image-data`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -111,14 +105,13 @@ export default function ImageProcessor({
 
           const result = await response.json()
           const processingTime = Date.now() - startTime
-          const processedUrl = result.translatedImgData || result.colorImgData;
 
-          if (processedUrl) {
+          if (result.colorImgData) {
             resolve({
               id: index,
               originalFile: file,
               originalUrl: URL.createObjectURL(file),
-              processedUrl: processedUrl,
+              processedUrl: result.colorImgData,
               error: null,
               processingTime
             })

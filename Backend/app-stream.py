@@ -50,6 +50,9 @@ def colorize_image_data():
         cache = req_json.get('cache', False)
         manga_title = req_json.get('mangaTitle', '')
         manga_chapter = req_json.get('mangaChapter', '')
+        translate = req_json.get('translate', False)
+        src_lang = req_json.get('srcLang', 'auto')
+        dest_lang = req_json.get('destLang', 'en')
 
         if denoise_sigma < 0:
             print(f'[-] [{rid}] Denoiser sigma ({denoise_sigma}) cannot be negative, using default')
@@ -99,6 +102,10 @@ def colorize_image_data():
             print(f'[*] [{rid}] Denoising image...')
             image = denoise_image(rid, image, denoiser, denoise_sigma)
 
+        if translate:
+            print(f'[*] [{rid}] Translating image...')
+            image = translate_image(rid, image, translator, src_lang, dest_lang)
+
         if colorize:
             print(f'[*] [{rid}] Colorizing image...')
             image = colorize_image(rid, image, colorizer, config.colorized_image_size)
@@ -126,46 +133,6 @@ def colorize_image_data():
 
     response = jsonify({'msg': f'Image: {img_name}, Error: Unable to colorize'})
     return response
-
-
-@app.route('/translate-image-data', methods=['POST'])
-def translate_image_data():
-    rid = generate_random_id()
-
-    try:
-        req_json = request.get_json()
-        img_name = req_json.get('imgName', f'Image-{rid}')
-        img_url = req_json.get('imgURL', '')
-        img_data = req_json.get('imgData')
-        src_lang = req_json.get('srcLang', 'auto')
-        dest_lang = req_json.get('destLang', 'en')
-
-        check_model_availability(rid, True, config.translate, 'translate')
-
-        if img_data:
-            img_metadata, img_data64 = img_data.split(',', 1)
-            orig_image_binary = base64.decodebytes(bytes(img_data64, encoding='utf-8'))
-        elif img_url:
-            orig_image_binary = retrieve_image_binary(rid, request, img_url)
-        else:
-            msg = 'Neither imgData nor imgURL found in the request'
-            print(f'[-] [{rid}] {msg}')
-            return jsonify({'msg': f'Image: {img_name}, Error: {msg}'})
-
-        imgio = io.BytesIO(orig_image_binary)
-        image = PIL.Image.open(imgio).convert("RGB")
-        image = np.array(image)
-
-        print(f'[*] [{rid}] Translating image...')
-        image = translator.translate(image, src_lang=src_lang, dest_lang=dest_lang)
-
-        result_image_data64 = image_to_base64(image)
-        return jsonify({'translatedImgData': result_image_data64})
-
-    except Exception as e:
-        print(f'[!] [{rid}] Error: {e}')
-        # handle_cuda_error(e) # Might not be a cuda error
-        return jsonify({'msg': f'Image: {img_name}, Error: Unable to translate'})
 
 
 def handle_cuda_error(e):
@@ -244,6 +211,14 @@ def denoise_image(rid, image, denoiser, sigma):
     elapsed_time = time.time() - start_time
     print(f'[+] [{rid}] Denoised image {[*image.shape]}->{[*denoised_image.shape]} in {elapsed_time:.2f} seconds.')
     return denoised_image
+
+
+def translate_image(rid, image, translator, src_lang, dest_lang):
+    start_time = time.time()
+    translated_image = translator.translate(image, src_lang, dest_lang)
+    elapsed_time = time.time() - start_time
+    print(f'[+] [{rid}] Translated image in {elapsed_time:.2f} seconds.')
+    return translated_image
 
 
 def colorize_image(rid, image, colorizer, size):

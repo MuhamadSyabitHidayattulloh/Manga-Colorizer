@@ -240,7 +240,7 @@ if (window.injectedMC !== 1) {
         });
     }
 
-    const setColoredOrFetch = (index, img, imgName, apiURL, force, imgContext, mangaProps) => {
+    const processOrFetch = (index, img, imgName, apiURL, force, imgContext, mangaProps) => {
         var canSendData = true;
         try {
             const grayMse = grayscaleMSE(index, imgContext);
@@ -276,7 +276,9 @@ if (window.injectedMC !== 1) {
 				upscale: upscale && !isAnimated,
 				denoiseSigma: Number(denoiseSigma),
 				upscaleFactor: Number(upscaleFactor),
-
+                translate: translate,
+                srcLang: srcLang,
+                destLang: destLang,
 				mangaTitle: mangaProps.title,
 				mangaChapter: mangaProps.chapter,
             }
@@ -305,56 +307,17 @@ if (window.injectedMC !== 1) {
         }
     }
 
-    const colorizeImg = (index, img, apiURL, force, mangaProps) => {
+    const processImg = (index, img, apiURL, force, mangaProps) => {
         if (apiURL) try {
             const imageName = mangaProps.altText ? img.alt : ''
             const imgName = imageName || (img.src || img.dataset?.src || '').rsplit('/', 1)[1];
             if (imgName) {
                 let imgContext = canvasContextFromImg(img);
-                return setColoredOrFetch(index, img, imgName, apiURL, force, imgContext, mangaProps);
+                return processOrFetch(index, img, imgName, apiURL, force, imgContext, mangaProps);
             }
             return 0;
         } catch(e) {
-            console.log(`[MC] [${index}] Colorize image error: ${e}`)
-            return 0;
-        }
-    }
-
-    const translateImg = (index, img, apiURL, force, mangaProps) => {
-        if (apiURL) try {
-            const imageName = mangaProps.altText ? img.alt : ''
-            const imgName = imageName || (img.src || img.dataset?.src || '').rsplit('/', 1)[1];
-            if (imgName) {
-                activeFetches += 1;
-                img.dataset.isProcessed = true;
-                const postData = {
-                    imgName: imgName,
-                    imgURL: img.src,
-                    imgWidth: img.width,
-                    imgHeight: img.height,
-                    srcLang: srcLang,
-                    destLang: destLang,
-                }
-                console.log(`[MC] [${index}] Sending for translation: `, postData);
-
-                const options = {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(postData)
-                };
-
-                fetchProcessedImg(index, new URL('translate-image-data', apiURL).toString(), options, img, imgName)
-                    .finally(() => {
-                        activeFetches -= 1;
-                        if(!force) processMangaEventHandler();
-                    });
-                return 3
-            }
-            return 0;
-        } catch(e) {
-            console.log(`[MC] [${index}] Translate image error: ${e}`)
+            console.log(`[MC] [${index}] Process image error: ${e}`)
             return 0;
         }
     }
@@ -448,12 +411,7 @@ if (window.injectedMC !== 1) {
         const pageNameFromAltText = site ? config.useAltTextAsImageName : false
 
         const mangaProps = {title: title, chapter: chapter, altText: pageNameFromAltText}
-        let status;
-        if (translate) {
-            status = translateImg(0, img, apiURL, true, mangaProps);
-        } else {
-            status = colorizeImg(0, img, apiURL, true, mangaProps);
-        }
+        let status = processImg(0, img, apiURL, true, mangaProps);
         console.log('[MC] Force process status: ', status)
     }
 
@@ -524,12 +482,7 @@ if (window.injectedMC !== 1) {
                             awaited++
                         } else {
                             const mangaProps = {title: title, chapter: chapter, altText: pageNameFromAltText}
-                            let status;
-                            if (translate) {
-                                status = translateImg(index, img, apiURL, false, mangaProps);
-                            } else {
-                                status = colorizeImg(index, img, apiURL, false, mangaProps);
-                            }
+                            let status = processImg(index, img, apiURL, false, mangaProps);
                             switch(status){
                                 case 0: failed++; break;
                                 case 1: colored++; break;

@@ -1,13 +1,13 @@
 import cv2
-import easyocr
 import numpy as np
 import translators as ts
 from PIL import Image, ImageDraw, ImageFont
+from manga_ocr import MangaOcr
 
 class MangaTranslator:
     def __init__(self, config):
         self.config = config
-        self.reader = easyocr.Reader(['ja', 'en'])  # Japanese and English
+        self.mocr = MangaOcr()
 
     def translate(self, image, src_lang='auto', dest_lang='en'):
         """
@@ -17,8 +17,10 @@ class MangaTranslator:
         :param dest_lang: The destination language.
         :return: The translated image (numpy array).
         """
+        pil_image = Image.fromarray(image)
+
         # Detect text
-        text_detections = self.reader.readtext(image)
+        text_detections = self.mocr(pil_image)
 
         # Inpaint original text
         inpainted_image = self.inpaint_text(image, text_detections)
@@ -32,15 +34,13 @@ class MangaTranslator:
         """
         Inpaints the detected text regions in the image.
         :param image: The image to inpaint (numpy array).
-        :param detections: The text detections from easyocr.
+        :param detections: The text detections from manga-ocr.
         :return: The inpainted image (numpy array).
         """
         mask = np.zeros(image.shape[:2], dtype=np.uint8)
-        for (bbox, text, prob) in detections:
-            (top_left, top_right, bottom_right, bottom_left) = bbox
-            top_left = (int(top_left[0]), int(top_left[1]))
-            bottom_right = (int(bottom_right[0]), int(bottom_right[1]))
-            cv2.rectangle(mask, top_left, bottom_right, (255), -1)
+        for detection in detections:
+            bbox = np.array(detection['bbox'], dtype=np.int32)
+            cv2.fillConvexPoly(mask, bbox, (255))
 
         inpainted_image = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
         return inpainted_image
@@ -49,7 +49,7 @@ class MangaTranslator:
         """
         Draws the translated text onto the image.
         :param image: The image to draw on (numpy array).
-        :param detections: The text detections from easyocr.
+        :param detections: The text detections from manga-ocr.
         :param src_lang: The source language.
         :param dest_lang: The destination language.
         :return: The image with translated text (numpy array).
@@ -57,14 +57,15 @@ class MangaTranslator:
         pil_image = Image.fromarray(image)
         draw = ImageDraw.Draw(pil_image)
 
-        for (bbox, text, prob) in detections:
+        for detection in detections:
+            text = detection['text']
             if not text.strip():
                 continue
 
             translated_text = ts.translate_text(text, from_language=src_lang, to_language=dest_lang)
 
-            (top_left, top_right, bottom_right, bottom_left) = bbox
-            top_left = (int(top_left[0]), int(top_left[1]))
+            bbox = detection['bbox']
+            top_left = (int(bbox[0][0]), int(bbox[0][1]))
 
             # Simple font choice for now
             try:

@@ -4,7 +4,7 @@ matplotlib
 numpy
 opencv_python_headless
 scikit_image
-easyocr
+manga-ocr
 translators
 torch
 torchvision
