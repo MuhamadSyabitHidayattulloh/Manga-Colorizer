@@ -1,3 +1,4 @@
+import * as FileSystem from 'expo-file-system';
 import { ProcessingSettings, ApiResponse } from '../types';
 
 export class ApiService {
@@ -33,30 +34,22 @@ export class ApiService {
     onProgress?: (progress: number) => void
   ): Promise<string> {
     try {
-      // Create FormData
-      const formData = new FormData();
-      
-      // Add image file
-      formData.append('image', {
-        uri: imageUri,
-        type: 'image/jpeg',
-        name: 'image.jpg',
-      } as any);
+      const base64Image = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
 
-      // Add processing parameters
-      formData.append('colorize', settings.colorize ? '1' : '0');
-      formData.append('upscale', settings.upscale ? '1' : '0');
-      formData.append('denoise', settings.denoise ? '1' : '0');
-      formData.append('upscale_factor', settings.upscaleFactor.toString());
-      formData.append('denoise_sigma', settings.denoiseSigma.toString());
-      formData.append('cache', settings.cache ? '1' : '0');
-
-      const response = await fetch(`${this.baseUrl}/colorize-image`, {
+      const response = await fetch(`${this.baseUrl}/colorize-image-data`, {
         method: 'POST',
-        body: formData,
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          image: base64Image,
+          colorize: settings.colorize ? 1 : 0,
+          upscale: settings.upscale ? 1 : 0,
+          denoise: settings.denoise ? 1 : 0,
+          upscale_factor: settings.upscaleFactor,
+          denoise_sigma: settings.denoiseSigma,
+          cache: settings.cache ? 1 : 0,
+        }),
       });
 
       if (!response.ok) {

@@ -114,6 +114,7 @@ export default function App() {
       <View style={styles.content}>
         <ImagePicker
           onImagesSelected={handleImagesSelected}
+          selectedImages={selectedImages}
           disabled={isProcessing}
         />
 

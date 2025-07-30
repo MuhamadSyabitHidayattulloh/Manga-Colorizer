@@ -5,6 +5,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  ScrollView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePickerLib from 'expo-image-picker';
@@ -13,10 +15,11 @@ import { ImageAsset } from '../types';
 
 interface ImagePickerProps {
   onImagesSelected: (images: ImageAsset[]) => void;
+  selectedImages: ImageAsset[];
   disabled?: boolean;
 }
 
-export default function ImagePicker({ onImagesSelected, disabled }: ImagePickerProps) {
+export default function ImagePicker({ onImagesSelected, selectedImages, disabled }: ImagePickerProps) {
   const requestPermissions = async () => {
     const { status } = await ImagePickerLib.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -50,7 +53,7 @@ export default function ImagePicker({ onImagesSelected, disabled }: ImagePickerP
           type: asset.type || 'image/jpeg',
           size: asset.fileSize || 0,
         }));
-        onImagesSelected(images);
+        onImagesSelected([...selectedImages, ...images]);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick images from gallery');
@@ -84,7 +87,7 @@ export default function ImagePicker({ onImagesSelected, disabled }: ImagePickerP
           type: asset.type || 'image/jpeg',
           size: asset.fileSize || 0,
         };
-        onImagesSelected([image]);
+        onImagesSelected([...selectedImages, image]);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to take photo');
@@ -109,7 +112,7 @@ export default function ImagePicker({ onImagesSelected, disabled }: ImagePickerP
           type: asset.mimeType || 'image/jpeg',
           size: asset.size || 0,
         }));
-        onImagesSelected(images);
+        onImagesSelected([...selectedImages, ...images]);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick files');
@@ -117,9 +120,35 @@ export default function ImagePicker({ onImagesSelected, disabled }: ImagePickerP
     }
   };
 
+  const removeImage = (index: number) => {
+    const newImages = selectedImages.filter((_, i) => i !== index);
+    onImagesSelected(newImages);
+  };
+
+  const clearAllImages = () => {
+    Alert.alert(
+      'Clear All Images',
+      'Are you sure you want to remove all selected images?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: () => onImagesSelected([]) },
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Select Images</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Select Images</Text>
+        {selectedImages.length > 0 && (
+          <TouchableOpacity onPress={clearAllImages} disabled={disabled}>
+            <Text style={[styles.clearText, disabled && styles.clearTextDisabled]}>
+              Clear All
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      
       <Text style={styles.subtitle}>
         Choose manga images to colorize using AI
       </Text>
@@ -158,6 +187,35 @@ export default function ImagePicker({ onImagesSelected, disabled }: ImagePickerP
           </Text>
         </TouchableOpacity>
       </View>
+
+      {selectedImages.length > 0 && (
+        <View style={styles.previewContainer}>
+          <Text style={styles.previewTitle}>
+            Selected Images ({selectedImages.length})
+          </Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.previewScroll}
+          >
+            {selectedImages.map((image, index) => (
+              <View key={index} style={styles.previewItem}>
+                <Image source={{ uri: image.uri }} style={styles.previewImage} />
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => removeImage(index)}
+                  disabled={disabled}
+                >
+                  <Ionicons name="close-circle" size={20} color="#ff4444" />
+                </TouchableOpacity>
+                <Text style={styles.fileName} numberOfLines={1}>
+                  {image.fileName}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
     </View>
   );
 }
@@ -169,12 +227,24 @@ const styles = StyleSheet.create({
     padding: 20,
     margin: 16,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
-    textAlign: 'center',
+  },
+  clearText: {
+    color: '#ff4444',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  clearTextDisabled: {
+    color: '#999',
   },
   subtitle: {
     fontSize: 14,
@@ -204,6 +274,43 @@ const styles = StyleSheet.create({
   },
   buttonTextDisabled: {
     color: '#999',
+  },
+  previewContainer: {
+    marginTop: 20,
+  },
+  previewTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 12,
+  },
+  previewScroll: {
+    flexDirection: 'row',
+  },
+  previewItem: {
+    marginRight: 12,
+    alignItems: 'center',
+    width: 100,
+  },
+  previewImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#3a3a3a',
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -8,
+    right: 8,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 10,
+  },
+  fileName: {
+    fontSize: 10,
+    color: '#ccc',
+    marginTop: 4,
+    textAlign: 'center',
+    width: 80,
   },
 });
 
